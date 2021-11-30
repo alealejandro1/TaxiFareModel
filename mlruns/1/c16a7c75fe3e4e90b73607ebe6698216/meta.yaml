@@ -1,0 +1,15 @@
+artifact_uri: file:///Users/alejandroseif/code/alealejandro1/TaxiFareModel/mlruns/1/c16a7c75fe3e4e90b73607ebe6698216/artifacts
+end_time: null
+entry_point_name: ''
+experiment_id: '1'
+lifecycle_stage: active
+name: ''
+run_id: c16a7c75fe3e4e90b73607ebe6698216
+run_uuid: c16a7c75fe3e4e90b73607ebe6698216
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1638275658414
+status: 1
+tags: []
+user_id: unknown
