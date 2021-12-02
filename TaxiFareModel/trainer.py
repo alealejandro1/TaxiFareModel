@@ -25,7 +25,6 @@ class Trainer():
         self.X = X
         self.y = y
         self.experiment_name = EXPERIMENT_NAME
-        # self.mlflow_client = None
 
     def set_pipeline(self):
         """defines the pipeline as a class attribute"""
@@ -56,8 +55,9 @@ class Trainer():
 
     def run(self):
         """set and train the pipeline"""
+        self.set_pipeline()
         # train the pipelined model
-        self.pipeline.fit(X_train, y_train)
+        self.pipeline.fit(self.X, self.y)
 
     def evaluate(self, X_test, y_test):
         """evaluates the pipeline on df_test and return the RMSE"""
