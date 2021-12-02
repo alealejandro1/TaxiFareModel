@@ -1,6 +1,7 @@
 from sklearn.base import BaseEstimator, TransformerMixin
 from TaxiFareModel.utils import haversine_vectorized
 import pandas as pd
+import numpy as np
 
 class TimeFeaturesEncoder(BaseEstimator, TransformerMixin):
     """
@@ -52,3 +53,21 @@ class DistanceTransformer(BaseEstimator, TransformerMixin):
                                               end_lat=self.end_lat,
                                               end_lon=self.end_lon)
         return X_[['distance']]
+
+    def DistanceToCenter(self, df):
+        """
+        Calculate the great circle distance between two points
+        on the earth (specified in decimal degrees).
+        Vectorized version of the haversine distance for pandas df
+        Computes distance in kms
+        """
+
+        lat_1_rad, lon_1_rad = np.radians(df[self.start_lat].astype(float)), np.radians(df[self.start_lon].astype(float))
+        lat_2_rad, lon_2_rad = np.radians(df[self.end_lat].astype(float)), np.radians(df[self.end_lon].astype(float))
+        dlon = lon_2_rad - lon_1_rad
+        dlat = lat_2_rad - lat_1_rad
+
+        a = np.sin(dlat / 2.0) ** 2 + np.cos(lat_1_rad) * np.cos(lat_2_rad) * np.sin(dlon / 2.0) ** 2
+        c = 2 * np.arcsin(np.sqrt(a))
+        haversine_distance = 6371 * c
+        return haversine_distance

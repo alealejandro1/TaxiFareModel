@@ -1,7 +1,10 @@
+from sklearn import model_selection
+from sklearn.model_selection import cross_validate
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LinearRegression, Lasso, Ridge
+from sklearn.tree import DecisionTreeRegressor
 from TaxiFareModel.data import get_data, get_Xy, clean_data, holdout
 from TaxiFareModel.encoders import DistanceTransformer, TimeFeaturesEncoder
 from TaxiFareModel.utils import compute_rmse
@@ -9,6 +12,7 @@ import random
 from memoized_property import memoized_property
 import mlflow
 from mlflow.tracking import MlflowClient
+import joblib
 
 MLFLOW_URI = "https://mlflow.lewagon.co/"
 
@@ -16,7 +20,7 @@ EXPERIMENT_NAME = f"[SG] [SG] [alejandro] linear regression + version {random.ra
 #city, github_nickname and model name and version
 
 class Trainer():
-    def __init__(self, X, y):
+    def __init__(self, X, y, model_name):
         """
             X: pandas DataFrame
             y: pandas Series
@@ -24,7 +28,23 @@ class Trainer():
         self.pipeline = None
         self.X = X
         self.y = y
+        self.model_name = model_name
         self.experiment_name = EXPERIMENT_NAME
+        self.rmse = None
+        self.metrics_dict = None
+
+    def model_selector(self):
+        model_dict = {}
+        if self.model_name == 'lasso':
+            model_dict['lasso'] = Lasso()
+        if self.model_name == 'ridge':
+            model_dict['ridge']= Ridge()
+        if self.model_name == 'decision_tree':
+            model_dict['decision_tree'] = DecisionTreeRegressor()
+        else:
+            model_dict['linear_regressor'] = LinearRegression()
+        return model_dict
+
 
     def set_pipeline(self):
         """defines the pipeline as a class attribute"""
@@ -46,10 +66,13 @@ class Trainer():
             ('time', time_pipe, ['pickup_datetime'])
         ], remainder="drop")
 
+
+        model_dict = self.model_selector()
+        model = model_dict[self.model_name]
         # Add the model of your choice to the pipeline
         pipe = Pipeline([
             ('preproc', preproc_pipe),
-            ('linear_model', LinearRegression())
+            (self.model_name, model)
         ])
         self.pipeline = pipe
 
@@ -59,6 +82,16 @@ class Trainer():
         # train the pipelined model
         self.pipeline.fit(self.X, self.y)
 
+    def run_CV(self):
+        """set and train the pipeline"""
+        self.set_pipeline()
+        # train the pipelined model
+        self.pipeline.fit(self.X, self.y)
+        cv = cross_validate(self.pipeline, self.X, self.y,
+                            scoring=['r2','neg_root_mean_squared_error'])
+        self.metrics_dict = {'r2':cv['test_r2'].mean(), 'rmse':(-1.)*cv['test_neg_root_mean_squared_error'].mean()}
+        print(self.metrics_dict)
+
     def evaluate(self, X_test, y_test):
         """evaluates the pipeline on df_test and return the RMSE"""
         # compute y_pred on the test set
@@ -66,7 +99,7 @@ class Trainer():
         # call compute_rmse
         rmse = compute_rmse(y_pred, y_test)
         print(f"Computed rmse of {rmse}")
-        return rmse
+        self.rmse = rmse
 
 ######
 
@@ -93,6 +126,9 @@ class Trainer():
     def mlflow_log_metric(self, key, value):
         self.mlflow_client.log_metric(self.mlflow_run.info.run_id, key, value)
 
+    def save_model(self):
+        """ Save the trained model into a model.joblib file """
+        joblib.dump(self.pipeline, 'model.joblib')
 
 if __name__ == "__main__":
     df = get_data()
@@ -100,13 +136,15 @@ if __name__ == "__main__":
     X,y = get_Xy(df)
     X_train, X_test, y_train, y_test = holdout(X,y)
 
-    trainer = Trainer(X_train, y_train)
-    trainer.set_pipeline()
-    trainer.run()
-    trainer.evaluate(X_test, y_test)
-
-    # trainer.mlflow_client()
-    # trainer.mlflow_experiment_id()
-    # trainer.mlflow_run()
-    trainer.mlflow_log_param('linear', 'linear')
-    trainer.mlflow_log_metric('rmse', trainer.evaluate(X_test, y_test))
+    models = ['lasso','ridge','decision_tree']
+    for model_name in models:
+        print(f'Currently running model {model_name}')
+        trainer = Trainer(X_train, y_train, model_name)
+        # trainer.set_pipeline()
+        trainer.run_CV()
+        trainer.evaluate(X_test, y_test)
+        trainer.mlflow_log_param('model', model_name)
+        for key,val in trainer.metrics_dict.items():
+            trainer.mlflow_log_metric(key, val)
+        trainer.save_model()
+    print('done')
