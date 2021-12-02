@@ -6,7 +6,7 @@ from sklearn.compose import ColumnTransformer
 from sklearn.linear_model import LinearRegression, Lasso, Ridge
 from sklearn.tree import DecisionTreeRegressor
 from TaxiFareModel.data import get_data, get_Xy, clean_data, holdout
-from TaxiFareModel.encoders import DistanceTransformer, TimeFeaturesEncoder
+from TaxiFareModel.encoders import DistanceToCenter, DistanceTransformer, TimeFeaturesEncoder
 from TaxiFareModel.utils import compute_rmse
 import random
 from memoized_property import memoized_property
@@ -46,13 +46,19 @@ class Trainer():
         return model_dict
 
 
-    def set_pipeline(self):
+    def set_pipeline(self, dtc = True):
         """defines the pipeline as a class attribute"""
         # create distance pipeline
         dist_pipe = Pipeline([
-            ('dist_trans', DistanceTransformer()),
-            ('stdscaler', StandardScaler())
-        ])
+                ('dist_trans', DistanceTransformer()),
+                ('stdscaler', StandardScaler())
+            ])
+
+        # if dtc, create another pipe
+        if dtc == 1:
+            dist_to_center_pipe = Pipeline([
+                ('dist_to_center', DistanceToCenter()),
+                                  ('stdscaler', StandardScaler())])
 
         # create time pipeline
         time_pipe = Pipeline([
@@ -61,10 +67,24 @@ class Trainer():
         ])
 
         # create preprocessing pipeline
-        preproc_pipe = ColumnTransformer([
-            ('distance', dist_pipe, ["pickup_latitude", "pickup_longitude", 'dropoff_latitude', 'dropoff_longitude']),
-            ('time', time_pipe, ['pickup_datetime'])
-        ], remainder="drop")
+
+        if dtc == 1:
+            preproc_pipe = ColumnTransformer(
+                [('distance', dist_pipe, [
+                    "pickup_latitude", "pickup_longitude", 'dropoff_latitude',
+                    'dropoff_longitude'
+                ]),
+                 ('distance_to_center', dist_to_center_pipe, [
+                     "pickup_latitude", "pickup_longitude"
+                 ]), ('time', time_pipe, ['pickup_datetime'])],
+                remainder="drop")
+
+        elif dtc == 0:
+            preproc_pipe = ColumnTransformer([('distance', dist_pipe, [
+                "pickup_latitude", "pickup_longitude", 'dropoff_latitude',
+                'dropoff_longitude'
+            ]), ('time', time_pipe, ['pickup_datetime'])],
+                                             remainder="drop")
 
 
         model_dict = self.model_selector()
@@ -76,15 +96,15 @@ class Trainer():
         ])
         self.pipeline = pipe
 
-    def run(self):
+    def run(self,dtc):
         """set and train the pipeline"""
-        self.set_pipeline()
+        self.set_pipeline(dtc)
         # train the pipelined model
         self.pipeline.fit(self.X, self.y)
 
-    def run_CV(self):
+    def run_CV(self,dtc):
         """set and train the pipeline"""
-        self.set_pipeline()
+        self.set_pipeline(dtc)
         # train the pipelined model
         self.pipeline.fit(self.X, self.y)
         cv = cross_validate(self.pipeline, self.X, self.y,
@@ -136,15 +156,19 @@ if __name__ == "__main__":
     X,y = get_Xy(df)
     X_train, X_test, y_train, y_test = holdout(X,y)
 
+    dtc_values = [0,1]
     models = ['lasso','ridge','decision_tree']
-    for model_name in models:
-        print(f'Currently running model {model_name}')
-        trainer = Trainer(X_train, y_train, model_name)
-        # trainer.set_pipeline()
-        trainer.run_CV()
-        trainer.evaluate(X_test, y_test)
-        trainer.mlflow_log_param('model', model_name)
-        for key,val in trainer.metrics_dict.items():
-            trainer.mlflow_log_metric(key, val)
-        trainer.save_model()
+    for dtc in dtc_values:
+        print(f'DTC is {dtc}')
+        for model_name in models:
+            print(f'Currently running model {model_name}')
+            trainer = Trainer(X_train, y_train, model_name)
+            # trainer.set_pipeline()
+            trainer.run_CV(dtc)
+            trainer.evaluate(X_test, y_test)
+            print('model', model_name + ' dtc ' + str(dtc))
+            trainer.mlflow_log_param('model', model_name + ' dtc '+ str(dtc))
+            for key,val in trainer.metrics_dict.items():
+                trainer.mlflow_log_metric(key, val)
+            trainer.save_model()
     print('done')

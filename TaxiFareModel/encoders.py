@@ -3,6 +3,8 @@ from TaxiFareModel.utils import haversine_vectorized
 import pandas as pd
 import numpy as np
 
+NYC_LAT_VALUE = 40.7141667
+NYC_LON_VALUE = -74.0063889
 class TimeFeaturesEncoder(BaseEstimator, TransformerMixin):
     """
             Extracts the day of week (dow), the hour, the month and the year from a time column.
@@ -54,20 +56,31 @@ class DistanceTransformer(BaseEstimator, TransformerMixin):
                                               end_lon=self.end_lon)
         return X_[['distance']]
 
-    def DistanceToCenter(self, df):
-        """
-        Calculate the great circle distance between two points
-        on the earth (specified in decimal degrees).
-        Vectorized version of the haversine distance for pandas df
-        Computes distance in kms
-        """
+class DistanceToCenter(BaseEstimator, TransformerMixin):
+    """
+    Give me the ditance between downtown NYC and my starting point
+    """
 
-        lat_1_rad, lon_1_rad = np.radians(df[self.start_lat].astype(float)), np.radians(df[self.start_lon].astype(float))
-        lat_2_rad, lon_2_rad = np.radians(df[self.end_lat].astype(float)), np.radians(df[self.end_lon].astype(float))
-        dlon = lon_2_rad - lon_1_rad
-        dlat = lat_2_rad - lat_1_rad
+    # let's compute the distance from the NYC center
+    def __init__(self,
+                 start_lat="pickup_latitude",
+                 start_lon="pickup_longitude"):
+        self.start_lat = start_lat
+        self.start_lon = start_lon
+        self.NYC_lat = 'NYC_lat'
+        self.NYC_lon = 'NYC_lon'
 
-        a = np.sin(dlat / 2.0) ** 2 + np.cos(lat_1_rad) * np.cos(lat_2_rad) * np.sin(dlon / 2.0) ** 2
-        c = 2 * np.arcsin(np.sqrt(a))
-        haversine_distance = 6371 * c
-        return haversine_distance
+    def fit(self, X, y=None):
+        return self
+
+    def transform(self, X, y=None):
+        assert isinstance(X, pd.DataFrame)
+        X_ = X.copy()
+        X_[self.NYC_lat] = NYC_LAT_VALUE
+        X_[self.NYC_lon] = NYC_LON_VALUE
+        X_["distance_to_center"] = haversine_vectorized(X_,
+                                              start_lat=self.NYC_lat,
+                                              start_lon=self.NYC_lon,
+                                              end_lat=self.start_lat,
+                                              end_lon=self.start_lon)
+        return X_[['distance_to_center']]
