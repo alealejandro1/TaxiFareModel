@@ -1,12 +1,13 @@
 import pandas as pd
 from sklearn.model_selection import train_test_split
+import TaxiFareModel.params as params
 
 AWS_BUCKET_PATH = "s3://wagon-public-datasets/taxi-fare-train.csv"
 
-
 def get_data(nrows=10_000):
     '''returns a DataFrame with nrows from s3 bucket'''
-    df = pd.read_csv(AWS_BUCKET_PATH, nrows=nrows)
+    # df = pd.read_csv(AWS_BUCKET_PATH, nrows=nrows)
+    df = pd.read_csv(f"gs://{params.GCLOUD_BUCKET_NAME}/{params.GCLOUD_TRAIN_DATA_PATH}",nrows=1000)
     return df
 
 

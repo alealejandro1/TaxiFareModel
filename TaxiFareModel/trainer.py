@@ -13,6 +13,8 @@ from memoized_property import memoized_property
 import mlflow
 from mlflow.tracking import MlflowClient
 import joblib
+from google.cloud import storage
+import TaxiFareModel.params as params
 
 MLFLOW_URI = "https://mlflow.lewagon.co/"
 
@@ -150,6 +152,13 @@ class Trainer():
         """ Save the trained model into a model.joblib file """
         joblib.dump(self.pipeline, 'model.joblib')
 
+    def upload_model_to_gcp(self):
+        """ Takes joblib and uploads to gcloud bucket"""
+        client = storage.Client()
+        bucket = client.bucket(params.GCLOUD_BUCKET_NAME)
+        blob = bucket.blob(params.GCLOUD_MODEL_STORAGE_LOCATION)
+        blob.upload_from_filename('model.joblib')
+
 if __name__ == "__main__":
     df = get_data()
     df = clean_data(df)
@@ -171,4 +180,5 @@ if __name__ == "__main__":
             for key,val in trainer.metrics_dict.items():
                 trainer.mlflow_log_metric(key, val)
             trainer.save_model()
+            trainer.upload_model_to_gcp()
     print('done')
