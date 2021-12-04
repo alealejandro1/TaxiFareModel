@@ -1,5 +1,13 @@
 PACKAGE_NAME = TaxiFareModel
 FILENAME = trainer
+GCLOUD_TRAIN_DATA_PATH = "data/train_1k.csv"
+GCLOUD_MODEL_STORAGE_LOCATION = 'models/taxifare/model.joblib'
+
+JOB_NAME = ex03_taxi_fare_training_pipeline_$(shell date +'%Y%m%d_%H%M%S')
+
+PYTHON_VERSION = 3.7
+FRAMEWORK = scikit-learn
+RUNTIME_VERSION = 1.15
 
 # ----------------------------------
 #          INSTALL & TEST
@@ -67,7 +75,7 @@ PROJECT_ID=wagon-bootcamp-706
 BUCKET_NAME=wagon-data-706-seif
 
 # choose your region from https://cloud.google.com/storage/docs/locations#available_locations
-REGION=ASIA-SOUTHEAST1
+REGION=asia-southeast1
 
 set_project:
 	@gcloud config set project ${PROJECT_ID}
@@ -99,3 +107,17 @@ upload_data:
 
 run_locally:
 	python -m ${PACKAGE_NAME}.${FILENAME}
+
+# ----------------------------------
+#      GCLOUD TRAINING JOB AI PLATFORM
+# ----------------------------------
+
+gcp_submit_training:
+	gcloud ai-platform jobs submit training ${JOB_NAME} \
+	--job-dir gs://${BUCKET_NAME}/${GCLOUD_TRAIN_DATA_PATH} \
+	--package-path ${PACKAGE_NAME} \
+	--module-name ${PACKAGE_NAME}.${FILENAME} \
+	--python-version=${PYTHON_VERSION} \
+	--runtime-version=${RUNTIME_VERSION} \
+	--region ${REGION}
+	--stream-logs

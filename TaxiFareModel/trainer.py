@@ -110,8 +110,8 @@ class Trainer():
         # train the pipelined model
         self.pipeline.fit(self.X, self.y)
         cv = cross_validate(self.pipeline, self.X, self.y,
-                            scoring=['r2','neg_root_mean_squared_error'])
-        self.metrics_dict = {'r2':cv['test_r2'].mean(), 'rmse':(-1.)*cv['test_neg_root_mean_squared_error'].mean()}
+                            scoring=['r2'])#,'neg_root_mean_squared_error'])
+        self.metrics_dict = {'r2':cv['test_r2'].mean()}#, 'rmse':(-1.)*cv['test_neg_root_mean_squared_error'].mean()}
         print(self.metrics_dict)
 
     def evaluate(self, X_test, y_test):
