@@ -1,11 +1,11 @@
 from sklearn import model_selection
-from sklearn.model_selection import cross_validate
+from sklearn.model_selection import cross_validate, GridSearchCV
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.linear_model import LinearRegression, Lasso, Ridge
 from sklearn.tree import DecisionTreeRegressor
-from TaxiFareModel.data import get_data, get_Xy, clean_data, holdout
+from TaxiFareModel.data import data_preparation
 from TaxiFareModel.encoders import DistanceToCenter, DistanceTransformer, TimeFeaturesEncoder
 from TaxiFareModel.utils import compute_rmse
 import random
@@ -15,11 +15,31 @@ from mlflow.tracking import MlflowClient
 import joblib
 from google.cloud import storage
 import TaxiFareModel.params as params
+from TaxiFareModel.data import DfOptimizer,df_optimized
+import xgboost as xgb
 
 MLFLOW_URI = "https://mlflow.lewagon.co/"
 
 EXPERIMENT_NAME = f"[SG] [SG] [alejandro] linear regression + version {random.randint(1,100)}"  # 🚨 replace with your country code,
 #city, github_nickname and model name and version
+
+# params = dict(
+#     nrows=10000,
+#     upload=True,
+#     local=False,  # set to False to get data from GCP (Storage or BigQuery)
+#     gridsearch=False,
+#     optimize=True,
+#     estimator="xgboost",
+#     mlflow=True,  # set to True to log params to mlflow
+#     experiment_name='experiment',
+#     pipeline_memory=None,  # None if no caching and True if caching expected
+#     distance_type="manhattan",
+#     feateng=[
+#         "distance_to_center", "direction", "distance", "time_features",
+#         "geohash"
+#     ],
+#     n_jobs=-1)
+
 
 class Trainer():
     def __init__(self, X, y, model_name):
@@ -36,6 +56,9 @@ class Trainer():
         self.metrics_dict = None
 
     def model_selector(self):
+        """
+        Potential models are 'lasso','ridge','decision_tree','xgboost'
+        """
         model_dict = {}
         if self.model_name == 'lasso':
             model_dict['lasso'] = Lasso()
@@ -43,6 +66,8 @@ class Trainer():
             model_dict['ridge']= Ridge()
         if self.model_name == 'decision_tree':
             model_dict['decision_tree'] = DecisionTreeRegressor()
+        if self.model_name == 'xgboost':
+            model_dict['xgboost'] = xgb.XGBRegressor()
         else:
             model_dict['linear_regressor'] = LinearRegression()
         return model_dict
@@ -91,11 +116,18 @@ class Trainer():
 
         model_dict = self.model_selector()
         model = model_dict[self.model_name]
-        # Add the model of your choice to the pipeline
+        ## Add the model of your choice to the pipeline
         pipe = Pipeline([
             ('preproc', preproc_pipe),
             (self.model_name, model)
         ])
+        ## Optimize data types to reduce space before training
+        # pipe = Pipeline([
+        #     ('preproc', preproc_pipe),
+        #     ('df_optimizer',DfOptimizer()),
+        #     (self.model_name, model)
+        # ])
+
         self.pipeline = pipe
 
     def run(self,dtc):
@@ -160,25 +192,23 @@ class Trainer():
         blob.upload_from_filename('model.joblib')
 
 if __name__ == "__main__":
-    df = get_data()
-    df = clean_data(df)
-    X,y = get_Xy(df)
-    X_train, X_test, y_train, y_test = holdout(X,y)
+
+    X_train, X_test, y_train, y_test = data_preparation()
 
     dtc_values = [0,1]
-    models = ['lasso','ridge','decision_tree']
+
     for dtc in dtc_values:
-        print(f'DTC is {dtc}')
-        for model_name in models:
-            print(f'Currently running model {model_name}')
-            trainer = Trainer(X_train, y_train, model_name)
-            # trainer.set_pipeline()
-            trainer.run_CV(dtc)
-            trainer.evaluate(X_test, y_test)
-            print('model', model_name + ' dtc ' + str(dtc))
-            trainer.mlflow_log_param('model', model_name + ' dtc '+ str(dtc))
-            for key,val in trainer.metrics_dict.items():
-                trainer.mlflow_log_metric(key, val)
-            trainer.save_model()
-            trainer.upload_model_to_gcp()
+        print(f'Currently running model {params.ESTIMATOR}')
+        trainer = Trainer(X_train, y_train, params.ESTIMATOR)
+
+        trainer.run_CV(dtc)
+        trainer.evaluate(X_test, y_test)
+
+        print('model', params.ESTIMATOR + ' dtc ' + str(dtc))
+        trainer.mlflow_log_param('model',
+                                    params.ESTIMATOR + ' dtc ' + str(dtc))
+        for key,val in trainer.metrics_dict.items():
+            trainer.mlflow_log_metric(key, val)
+        trainer.save_model()
+        trainer.upload_model_to_gcp()
     print('done')
